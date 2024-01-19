@@ -28,11 +28,12 @@ struct ReceivePacket
 struct SendPacket
 {
   uint8_t header = 0xA5;
-  bool tracking : 1;
+  bool is_fire : 1;
   uint8_t reserved : 7;
   float x;
   float y;
   float z;
+  float v_yaw;
   float pitch;
   float yaw;
   uint16_t checksum = 0;

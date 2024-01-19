@@ -27,12 +27,6 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
   owned_ctx_{new IoContext(2)},
   serial_driver_{new drivers::serial_driver::SerialDriver(*owned_ctx_)}
 {
-    // 创建并打开 CSV 文件
-  csv_file_ = std::ofstream("/ros_ws/src/rm_serial_driver/src/data.csv", std::ios::app);
-  if (!csv_file_.is_open()) {
-    RCLCPP_ERROR(get_logger(), "Failed to open CSV file for writing.");
-    // 处理打开文件失败的情况
-  }
 
   RCLCPP_INFO(get_logger(), "Start RMSerialDriver!");
 
@@ -88,21 +82,6 @@ RMSerialDriver::RMSerialDriver(const rclcpp::NodeOptions & options)
 RMSerialDriver::~RMSerialDriver()
 {
 
-   // 关闭 CSV 文件
-  if (csv_file_.is_open()) {
-    csv_file_.close();
-  }
-  if (receive_thread_.joinable()) {
-    receive_thread_.join();
-  }
-
-  if (serial_driver_->port()->is_open()) {
-    serial_driver_->port()->close();
-  }
-
-  if (owned_ctx_) {
-    owned_ctx_->waitForExit();
-  }
 }
 
 void RMSerialDriver::receiveData()
@@ -185,10 +164,11 @@ void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Send::SharedPtr ms
 
   try {
     SendPacket packet;
-    packet.tracking = msg->tracking;
+    packet.is_fire = msg->is_fire;
     packet.x = msg->position.x;
     packet.y = msg->position.y;
     packet.z = msg->position.z;
+    packet.v_yaw = msg->v_yaw;
     packet.pitch = msg->pitch;
     packet.yaw = msg->yaw;
 
@@ -200,24 +180,12 @@ void RMSerialDriver::sendData(const auto_aim_interfaces::msg::Send::SharedPtr ms
 
     std::vector<uint8_t> data = toVector(packet);
 
-  //  // 将数据以十六进制格式写入 CSV 文件
-  //   for (const auto& byte : data) {
-  //     csv_file_ << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte) << ",";
-  //   }
-  //   csv_file_ << "\n"; // 写入换行符表示新的一行
-  //   csv_file_.flush(); // 刷新文件缓冲区，确保数据被写入文件
-
     serial_driver_->port()->send(data);
 
     std_msgs::msg::Float64 latency;
     latency.data = (this->now() - msg->header.stamp).seconds() * 1000.0;
     RCLCPP_DEBUG_STREAM(get_logger(), "Total latency: " + std::to_string(latency.data) + "ms");
     latency_pub_->publish(latency);
-
-    //     // 保存到CSV文件
-    // std::ofstream file("/ros_ws/src/rm_serial_driver/src/data.csv", std::ios::app); // 打开CSV文件，使用追加模式
-    // file << packet.x << "," << packet.y << "," << packet.z << "," << packet.yaw << "\n"; // 写入数据
-    // file.close(); // 关闭文件
 
   } catch (const std::exception & ex) {
     RCLCPP_ERROR(get_logger(), "Error while sending data: %s", ex.what());
